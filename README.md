@@ -17,8 +17,3 @@ Arduino based reflow oven with GUI.
 - Arduino NANO & MAX31855K
 
 - Safety (!)
-<<<<<<< HEAD
-=======
-
--
->>>>>>> 086f743d0f57c1f0e9c4f6cfac473c6c81ae442d
