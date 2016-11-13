@@ -8,7 +8,7 @@ Arduino based reflow oven with GUI.
 
 - PID Control Loop
 
-- Zero-Crossing
+- ~~Zero-Crossing ~~ (not for now)
 
 - Touch LCD + Click Encoder
 
@@ -17,3 +17,11 @@ Arduino based reflow oven with GUI.
 - Arduino NANO & MAX31855K
 
 - Safety (!)
+
+
+
+---
+
+
+You can view the project on [Hackaday](https://hackaday.io/project/11858-reflow-oven "Project on Hackaday")
+
