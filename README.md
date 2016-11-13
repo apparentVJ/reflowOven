@@ -8,7 +8,7 @@ Arduino based reflow oven with GUI.
 
 - PID Control Loop
 
-- ~~Zero-Crossing ~~ (not for now)
+- ~~Zero-Crossing~~ (not for now)
 
 - Touch LCD + Click Encoder
 

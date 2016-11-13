@@ -42,9 +42,6 @@
 
 
 
-
-
-
 //-------------------------------------------------------------
 /*                     1.  INCLUDES                          */
 //-------------------------------------------------------------
@@ -78,6 +75,7 @@
 //------ Transistor - Solid State Relay -----------------------
 
   const unsigned char ssrPin = 2;
+
 
 
 
@@ -210,8 +208,8 @@ typedef enum DEBOUNCE_STATE
 // ***** CONSTANTS *****
 #define TEMPERATURE_ROOM 21
 #define TEMPERATURE_SOAK_MIN 150
-#define TEMPERATURE_SOAK_MAX 200
-#define TEMPERATURE_REFLOW_MAX 200
+#define TEMPERATURE_SOAK_MAX 183
+#define TEMPERATURE_REFLOW_MAX 235
 #define TEMPERATURE_COOL_MIN 100
 #define SENSOR_SAMPLING_TIME 500
 #define SOAK_TEMPERATURE_STEP 5
@@ -245,9 +243,7 @@ const char* lcdMessagesReflowStatus[] = {
   "Error"
 };
 
-// ***** DEGREE SYMBOL FOR LCD *****
-unsigned char degree[8]  = {
-  140,146,146,140,128,128,128,128};
+unsigned char degree[8]  = {140,146,146,140,128,128,128,128};
 
 // ***** PID CONTROL VARIABLES *****
 double setpoint;
@@ -278,6 +274,8 @@ int timerSeconds;
 
 // Specify PID control interface
 //PID reflowOvenPID(&input, &output, &setpoint, kp, ki, kd, DIRECT);
+
+
 
 
 
@@ -330,8 +328,6 @@ uint8_t menuItemHeight = 40;
 
 bool menuUpdateRequest = true;
 bool initialProcessDisplay = false;
-
-//unsigned char degree[8] = {140,146,146,140,128,128,128,128};
 
 
 
@@ -444,13 +440,8 @@ void readThermo(int delayInterval)
   delay(delayInterval);
 
   //Serial.println(delayInterval);
-
-
   
 }
-
-
-
 
 // Encoder ----------------------------------------------------
 
@@ -472,7 +463,6 @@ private:
 void timerIsr(void) {
   Encoder.service();
 }
-
 
 
 
@@ -572,7 +562,6 @@ MenuItem(miEditProfile, "Reflow Profiles",  miPIDSettings,    miEditProfile,    
   MenuItem(miFactoryReset, "FactoryReset",    miCalibBack,      miSaveProfile,      miEditProfile,   Menu::NullItem,   menuDummy);
   MenuItem(miCalibBack,    "Back",            Menu::NullItem,   miFactoryReset,     miEditProfile,   Menu::NullItem,   menuBack);
   
- 
 // PID Calibration
 MenuItem(miPIDSettings, "PID",              Menu::NullItem,   miEditProfile,        miExit,        miCalibrateP,      menuDummy);
 
@@ -580,10 +569,6 @@ MenuItem(miPIDSettings, "PID",              Menu::NullItem,   miEditProfile,    
   MenuItem(miCalibrateI, "Calibrate I",       miCalibrateD,     miCalibrateP,        miPIDSettings,     Menu::NullItem,   menuDummy );
   MenuItem(miCalibrateD, "Calibrate D",       miCalibBack1,     miCalibrateI,        miPIDSettings,     Menu::NullItem,   menuDummy );
   MenuItem(miCalibBack1,  "Back",             Menu::NullItem,   miCalibrateD,        miPIDSettings,     Menu::NullItem,   menuBack);
-  
-
-
-
 
 
 
@@ -645,6 +630,15 @@ void setup() {
   pinMode(YM, OUTPUT);
 }
 
+
+
+
+
+
+
+
+
+
 //-----------------------------------------------------------------------
 /*                             LOOP                                   */
 //-----------------------------------------------------------------------
@@ -688,16 +682,14 @@ void loop() {
             enterMenu();
             }
             
-    }else if (page == 5){/*
+    }else if (page == 5){
+            
+            /*
             if(p.x > 20 && p.x < 220 && p.y > 20 && p.y < 100){
             enterMenu();
-            }    */
-            
-            
-            
-            
-            
-            
+            }
+            */
+       
     // handle encoder
   encMovement = Encoder.getValue();
   if (encMovement) {
@@ -836,15 +828,6 @@ void loop() {
 
 
 
-
-
-
-
-
-
-
-
-
 //-------------------------------------------------------------
 /*                    CUSTOM MENU                            */
 //-------------------------------------------------------------
@@ -870,7 +853,7 @@ void enterMenu(){
   tft.setTextColor(WHITE);
   tft.println("Settings");
   
-/* // PID
+  /*// PID
   tft.fillRect( 20, 250, 70, 50, TURQUOISE );
   tft.setCursor (38, 268);
   tft.setTextSize (2);
@@ -880,7 +863,7 @@ void enterMenu(){
   
   waitOneTouch();  
  
- }  
+}  
 
 void profileSelect(){
   
@@ -905,8 +888,15 @@ void profileSelect(){
   waitOneTouch();  
 
 }
-  
-  
+
+
+
+
+
+
+
+
+
 
 //-------------------------------------------------------------
 /*                    CUSTOM MENU                            */
@@ -916,13 +906,7 @@ void reflow(){
   
   page = 3;
   tft.fillScreen(BLACK);
-
-
-  readThermo(500);
-
-
-
-  
+  readThermo(500);  
   // Graph
   for (x = 0; x <= 360; x += 0.001)
   {
@@ -961,6 +945,11 @@ void settings(){
   waitOneTouch();
  // enterMenu();
 }
+
+
+
+
+
 
 
 
@@ -1012,8 +1001,8 @@ void GraphTemp(Adafruit_TFTLCD &d, double x, double y, double gx, double gy, dou
   double temp;
   int rot, newrot;
 
-  if (redraw == true) {
-
+  if (redraw == true)
+  {
     redraw = false;
     ox = (x - xlo) * ( w) / (xhi - xlo) + gx;
     oy = (y - ylo) * (gy - h - gy) / (yhi - ylo) + gy;
@@ -1075,10 +1064,9 @@ void GraphTemp(Adafruit_TFTLCD &d, double x, double y, double gx, double gy, dou
     d.setTextColor();
     d.setCursor(gx +2, gy + 6);
     d.println(reflowZone);*/
-
   }
+  
   //graph drawn now plot the data
-  // the entire plotting code are these few lines...
   // recall that ox and oy are initialized as static above
   x =  (x - xlo) * ( w) / (xhi - xlo) + gx;
   y =  (y - ylo) * (gy - h - gy) / (yhi - ylo) + gy;
@@ -1087,9 +1075,7 @@ void GraphTemp(Adafruit_TFTLCD &d, double x, double y, double gx, double gy, dou
   d.drawLine(ox, oy - 1, x, y - 1, pcolor);
   ox = x;
   oy = y;
-
 }
-
 //---------------------------------------------------------------------
 void GraphError(Adafruit_TFTLCD &d, double x, double y, double gx, double gy, double w, double h, double xlo, double xhi, double xinc, double ylo, double yhi, double yinc, unsigned int gcolor, unsigned int acolor, unsigned int pcolor, unsigned int bcolor, boolean &redraw)
 {
@@ -1102,3 +1088,4 @@ void GraphError(Adafruit_TFTLCD &d, double x, double y, double gx, double gy, do
   oy2 = y;
 
 }  
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
