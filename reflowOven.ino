@@ -1,62 +1,117 @@
 /* 
-*    floatLab - ReflowOven @ 2016   
+*
+*     floatLab reflowOven    
+*    
+*
+* 
+* 235-|                                                 x
+*     |                                               x   x  within 5°C [10-30s]
+*     |                                            x        x
+*     |                                          x              x
+*     |                                       x                    x
+* 183-|------------------------------------x                          x
+*     |                              x                                    x   
+*     |                         x         |                          |       x
+*     |                    x              |                          |
+*     |               x                   |                          |
+*     |             x |                   |                          |
+*     |           x   |                   |                          | 
+* 100-|---------x-----|                   |                          | 
+*     |       x       |                   |                          | 
+*     |     x         |                   |                          |
+*     |   x           |                   |                          |
+*     | x  max. 3°C/s |                   |                          |
+*     |<  60 - 90 s  >|<    90 - 120 s   >|<       90 - 120 s       >|   max. 6°C/s
+*     | Preheat Stage |   Soaking Stage   |       Reflow Stage       | Cool
+*     |  100°C-150°C  |    max. 183°C     |                          |
+*  0  |_ _ _ _ _ _ _ _|_ _ _ _ _ _ _ _ _ _|_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+*
+*
+*
+*
+*
+*
+*
+*
 */
 
-//------ Includes ----------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+//-------------------------------------------------------------
+/*                     1.  INCLUDES                          */
+//-------------------------------------------------------------
 
 //#include <SPI.h>
+//#include <avr/eeprom.h>
+//#include <EEPROM.h>
 
+//------ PID Library ------------------------------------------
+#include <PID_v1.h>
+#include <PID_AutoTune_v0.h>
 
-//------ PID Library --------------------------------------------------
+//------ Thermocouple -----------------------------------------
+#define USE_MAX31855
 
-//#include <PID_v1.h>
+#ifdef  USE_MAX31855
+  #include <MAX31855.h>
+#else
+  #include <max6675.h>
+#endif
 
-//double Setpoint, Input, Output; // variables
-
-//double aggKp=4, aggKi=0.2, aggKd=1;         // aggressive 
-//double consKp=1, consKi=0.05, consKd=0.25;  // conservative 
-
-//PID myPID(&Input, &Output, &Setpoint, consKp, consKi, consKd, DIRECT);
-
-//------ Thermocouple --------------------------------------------------
-/*
-#include<MAX31855.h>
-
-
-const  unsigned  char thermocoupleSO = 12;
-const  unsigned  char thermocoupleCS = 10;
-const  unsigned  char thermocoupleCLK = 13;
-
-MAX31855  MAX31855(thermocoupleSO, thermocoupleCS, thermocoupleCLK);
-*/
-
-//------ Menu, Encoder & Timer --------------------------------------------------
+//------ Menu, Encoder & Timer --------------------------------
 #include <ClickEncoder.h>
 #include <TimerOne.h>
 #include <Menu.h>
 
-//------ Display & TouchScreen --------------------------------------------------
-
-#include <SPFD5408_Adafruit_GFX.h>    // Core graphics library
-#include <SPFD5408_Adafruit_TFTLCD.h> // Hardware-specific library
+//------ Display & TouchScreen --------------------------------
+#include <SPFD5408_Adafruit_TFTLCD.h>
 #include <SPFD5408_TouchScreen.h>
 
-#define YP A1  // must be an analog pin, use "An" notation!
-#define XM A2  // must be an analog pin, use "An" notation!
-#define YM 7   // can be a digital pin
-#define XP 6   // can be a digital pin
+//------ Transistor - Solid State Relay -----------------------
+
+  const unsigned char ssrPin = 2;
+
+
+
+
+
+
+
+
+
+
+
+//-------------------------------------------------------------
+/*                     2.   DEFINES                          */
+//-------------------------------------------------------------
+
+
+//------ Touchscreen ------------------------------------------
+
+#define MINPRESSURE 10
+#define MAXPRESSURE 1000
+
+#define YP A1
+#define XM A2
+#define YM 7
+#define XP 6
 
 #define TS_MINX 125
 #define TS_MINY 85
 #define TS_MAXX 958
 #define TS_MAXY 905
 
-/*
-#if defined(__SAM3X8E__)
-#undef __FlashStringHelper::F(string_literal)
-#define F(string_literal) string_literal
-#endif
-*/
+  TouchScreen ts = TouchScreen(XP, YP, XM, YM, 300);
+
+//  Display -------------------------------------------------
 
 #define LCD_RST A4
 #define LCD_CS A3
@@ -64,103 +119,340 @@ MAX31855  MAX31855(thermocoupleSO, thermocoupleCS, thermocoupleCLK);
 #define LCD_WR A1
 #define LCD_RD A0
 
-#define LTBLUE    0xB6DF
-#define LTTEAL    0xBF5F
-#define LTGREEN   0xBFF7
-#define LTCYAN    0xC7FF
-#define LTRED     0xFD34
-#define LTMAGENTA 0xFD5F
-#define LTYELLOW  0xFFF8
-#define LTORANGE  0xFE73
-#define LTPINK    0xFDDF
-#define LTPURPLE  0xCCFF
-#define LTGREY    0xE71C
+  Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RST);
 
-#define BLUE      0x001F
-#define TEAL      0x0438
-#define GREEN     0x07E0
-#define CYAN      0x07FF
-#define RED       0xF800
-#define MAGENTA   0xF81F
-#define YELLOW    0xFFE0
-#define ORANGE    0xFC00
-#define PINK      0xF81F
-#define PURPLE    0x8010
-#define GREY      0xC618
-#define WHITE     0xFFFF
-#define BLACK     0x0000
 
-//UI Color Palette
+// 3. Thermocouple --------------------------------------------
 
+#ifdef  USE_MAX31855
+  const  unsigned  char thermocoupleSO = 12;
+  const  unsigned  char thermocoupleCS = 10;
+  const  unsigned  char thermocoupleCLK = 13;
+  
+    MAX31855  MAX31855(thermocoupleSO, thermocoupleCS, thermocoupleCLK);
+#else
+
+  const unsigned char thermocoupleSOPin = 12;
+  const unsigned char thermocoupleCSPin = 10;
+  const unsigned char thermocoupleCLKPin = 13;
+
+    MAX6675 thermocouple(thermocoupleCLKPin, thermocoupleCSPin, thermocoupleSOPin);
+    
+#endif
+ 
+
+
+//  PID Algorithm -------------------------------------------
+
+double Setpoint, Input, Output; // variables
+  
+double aggKp=4, aggKi=0.2, aggKd=1;         // aggressive 
+double consKp=1, consKi=0.05, consKd=0.25;  // conservative 
+  
+  PID myPID(&Input, &Output, &Setpoint, consKp, consKi, consKd, DIRECT);
+ 
+  
+// Rotary Encoder ------------------------------------------
+
+#define clampValue(val, lo, hi) if (val > hi) val = hi; if (val < lo) val = lo;
+#define maxValue(a, b) ((a > b) ? a : b)
+#define minValue(a, b) ((a < b) ? a : b)
+
+
+  ClickEncoder Encoder(10, 11, 12);
+
+    
+// Colors --------------------------------------------------
+
+#define DKGREY    0x4A49
 #define CLOUDS    0xEF9E
 #define TURQUOISE 0x1DF3
-#define CARROT    0xE3E4
 #define AMETHYST  0x9AD6
-#define CONCRETE  0x9534
-#define ALIZARIN  0xE267
-#define POMEGRANATE 0xC1C5
-#define MIDNIGHT  0x29EA
-#define QUARTZ    0xF659
-#define SERENITY  0x955A
-
 #define MYBROWN   0xA301
-#define MYGREEN   0x04E7
+#define CONCRETE  0x9534
+#define ORANGE    0xFC00
+#define POMEGRANATE 0xC1C5
 
-#define DKBLUE    0x000D
-#define DKTEAL    0x020C
-#define DKGREEN   0x03E0
-#define DKCYAN    0x03EF
-#define DKRED     0x6000
-#define DKMAGENTA 0x8008
-#define DKYELLOW  0x8400
-#define DKORANGE  0x8200
-#define DKPINK    0x9009
-#define DKPURPLE  0x4010
-#define DKGREY    0x4A49
 
-#define MINPRESSURE 10
-#define MAXPRESSURE 1000
+// ***** TYPE DEFINITIONS *****
+typedef enum REFLOW_STATE
+{
+  REFLOW_STATE_IDLE,
+  REFLOW_STATE_PREHEAT,
+  REFLOW_STATE_SOAK,
+  REFLOW_STATE_REFLOW,
+  REFLOW_STATE_COOL,
+  REFLOW_STATE_COMPLETE,
+  REFLOW_STATE_TOO_HOT,
+  REFLOW_STATE_ERROR
+} reflowState_t;
 
-TouchScreen ts = TouchScreen(XP, YP, XM, YM, 300);
-Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RST);
+typedef enum REFLOW_STATUS
+{
+  REFLOW_STATUS_OFF,
+  REFLOW_STATUS_ON
+} reflowStatus_t;
+
+typedef enum SWITCH
+{
+  SWITCH_NONE,
+  SWITCH_1, 
+  SWITCH_2
+} switch_t;
+
+typedef enum DEBOUNCE_STATE
+{
+  DEBOUNCE_STATE_IDLE,
+  DEBOUNCE_STATE_CHECK,
+  DEBOUNCE_STATE_RELEASE
+} debounceState_t;
+
+// ***** CONSTANTS *****
+#define TEMPERATURE_ROOM 21
+#define TEMPERATURE_SOAK_MIN 150
+#define TEMPERATURE_SOAK_MAX 200
+#define TEMPERATURE_REFLOW_MAX 200
+#define TEMPERATURE_COOL_MIN 100
+#define SENSOR_SAMPLING_TIME 500
+#define SOAK_TEMPERATURE_STEP 5
+#define SOAK_MICRO_PERIOD 9000
+#define DEBOUNCE_PERIOD_MIN 50
+
+// ***** PID PARAMETERS *****
+// ***** PRE-HEAT STAGE *****
+#define PID_KP_PREHEAT 100
+#define PID_KI_PREHEAT 0.025
+#define PID_KD_PREHEAT 20
+// ***** SOAKING STAGE *****
+#define PID_KP_SOAK 300
+#define PID_KI_SOAK 0.05
+#define PID_KD_SOAK 250
+// ***** REFLOW STAGE *****
+#define PID_KP_REFLOW 300
+#define PID_KI_REFLOW 0.05
+#define PID_KD_REFLOW 350
+#define PID_SAMPLE_TIME 1000
+
+// ***** LCD MESSAGES *****
+const char* lcdMessagesReflowStatus[] = {
+  "Ready",
+  "Pre-heat",
+  "Soak",
+  "Reflow",
+  "Cool",
+  "Complete",
+  "Wait,hot",
+  "Error"
+};
+
+// ***** DEGREE SYMBOL FOR LCD *****
+unsigned char degree[8]  = {
+  140,146,146,140,128,128,128,128};
+
+// ***** PID CONTROL VARIABLES *****
+double setpoint;
+double input;
+double output;
+double kp = PID_KP_PREHEAT;
+double ki = PID_KI_PREHEAT;
+double kd = PID_KD_PREHEAT;
+int windowSize;
+unsigned long windowStartTime;
+unsigned long nextCheck;
+unsigned long nextRead;
+unsigned long timerSoak;
+unsigned long buzzerPeriod;
+
+// Reflow oven controller state machine state variable
+reflowState_t reflowState;
+// Reflow oven controller status
+reflowStatus_t reflowStatus;
+// Switch debounce state machine state variable
+debounceState_t debounceState;
+// Switch debounce timer
+long lastDebounceTime;
+// Switch press status
+switch_t switchStatus;
+// Seconds timer
+int timerSeconds;
+
+// Specify PID control interface
+//PID reflowOvenPID(&input, &output, &setpoint, kp, ki, kd, DIRECT);
+
+
+
+
+
+
+
 
 //-------------------------------------------------------------
-/*                    VARIABLES                       */
+/*                  3.   VARIABLES                           */
 //-------------------------------------------------------------
 
+// Display variables
 boolean display1 = true;
 
 double ox , oy ;
 double ox2, oy2 ;
-double ox3, oy3 ;
-double ox4, oy4 ;
-double ox5, oy5 ;
 
-double x;
-double y, y2, y3, y4, y5;
+double x = 1.0 ;
+double y, y2;
 
 uint16_t page = 0;
 
+
+// Temperature measurements
+double temperature;
+double junctionTemp;
+
+
+//Graph timings
+const long interval = 1000; // 1px / s
+unsigned long currentMillis;
+unsigned long previousMillis = 0;
+
+
+// Touch point
 TSPoint p;
-/*
-
-// data type for the values used in the reflow profile
-typedef struct profileValues_s {
-  int16_t soakTemp;
-  int16_t soakDuration;
-  int16_t peakTemp;
-  int16_t peakDuration;
-  double  rampUpRate;
-  double  rampDownRate;
-  uint8_t checksum;
-} Profile_t;
-
-*/
 
 
-//-------------------------------------------------------------
-/*                    ENCODER                                */
-//-------------------------------------------------------------
+// Encoder Menu
+int16_t encMovement;
+int16_t encAbsolute;
+int16_t encLastAbsolute = -1;
+
+bool updateMenu = false;
+
+
+uint8_t menuItemsVisible = 8;
+uint8_t menuItemHeight = 40;
+
+bool menuUpdateRequest = true;
+bool initialProcessDisplay = false;
+
+//unsigned char degree[8] = {140,146,146,140,128,128,128,128};
+
+
+
+
+
+
+
+
+
+
+//-----------------------------------------------------------------------
+/*            4.   Custom Functions (little helpers)                   */
+//-----------------------------------------------------------------------
+
+
+// Reset the Arduino after a succesful reflow.
+void(*resetFunc)(void) = 0;
+
+
+// Wait one touch ---------------------------------------------
+TSPoint waitOneTouch() {
+
+  //TSPoint p;
+
+  do {
+    p = ts.getPoint();
+
+    pinMode(XM, OUTPUT); //Pins configures again for TFT control
+    pinMode(YP, OUTPUT);
+
+  } while ((p.z < MINPRESSURE ) || (p.z > MAXPRESSURE));
+
+  return p;
+}
+
+//----------Return Touch Coordinates -------------------------
+TSPoint getTouch() {
+  
+    p = ts.getPoint();
+  
+   // if sharing pins, you'll need to fix the directions of the touchscreen pins
+      //pinMode(XP, OUTPUT);
+        pinMode(XM, OUTPUT); //Pins configures again for TFT control
+        pinMode(YP, OUTPUT);
+      //pinMode(YM, OUTPUT);
+ 
+   if ((p.z < MINPRESSURE ) || (p.z > MAXPRESSURE)){      
+                  
+      //  Serial.print("X = "); Serial.print(p.x);
+      //  Serial.print("\tY = "); Serial.print(p.y);
+      //  Serial.print("\tPressure = "); Serial.println(p.z);
+         
+        // if(p.y< (TS_MINY -5)){
+        //  Serial.println("erase");
+          // press the bottom of the screen to erase
+        //  tft.fillRect(0, BOXSIZE, tft.width(), tft.height() - BOXSIZE, BLACK);
+        // }     
+        p.x = map(p.x, TS_MINX, TS_MAXX, 0, tft.width());
+        p.y = map(p.y, TS_MINY, TS_MAXY, 0, tft.height());
+  }
+}
+
+// Border ----------------------------------------------------
+
+void drawBorder()
+{
+  uint16_t width = tft.width() - 1;
+  uint16_t height = tft.height() - 1;
+  uint8_t border = 10;
+
+  tft.fillScreen(BLACK);
+  tft.fillRect(border, border, (width - border * 2), (height - border * 2), MYBROWN);//BLACK);
+  tft.drawRect(border, border, (width - border * 2), (height - border * 2), AMETHYST);//WHITE);
+  
+  tft.setCursor (24, 50);
+  tft.setTextSize (4);
+  tft.setTextColor(WHITE);
+  tft.println("floatLab");
+  tft.setCursor (26, 85);
+  tft.setTextSize (3);
+  tft.println("Reflow Oven");
+  tft.setCursor (87, 150);
+  tft.setTextSize (2);
+  tft.setTextColor(WHITE);
+  tft.println("v_0.1");
+  tft.fillRoundRect(20,200,200,100,16,TURQUOISE);
+  tft.setCursor (68, 250);
+  tft.setTextSize (1);
+  tft.setTextColor(WHITE);
+  tft.println("Touch to proceed");
+    
+}
+
+// Read Thermocouple Temperature ( MAX31866 / MAX6675 )
+
+void readThermo(int delayInterval)
+{
+  
+  temperature = MAX31855.readThermocouple(CELSIUS);
+  Serial.print("Thermocouple temperature: ");
+  Serial.println(temperature);
+  //Serial.println(" Degree Celsius");
+  
+  // Retrieve cold junction temperature in Degree Celsius
+  //junctionTemp = MAX31855.readJunction(CELSIUS);
+  //Serial.print("Junction temperature: ");
+  //erial.println(junctionTemp);
+  //Serial.println(" Degree Celsius");
+   
+  delay(delayInterval);
+
+  //Serial.println(delayInterval);
+
+
+  
+}
+
+
+
+
+// Encoder ----------------------------------------------------
 
 class ScopedTimer {
 public:
@@ -177,16 +469,18 @@ private:
   const unsigned long ts;
 };
 
-#define clampValue(val, lo, hi) if (val > hi) val = hi; if (val < lo) val = lo;
-#define maxValue(a, b) ((a > b) ? a : b)
-#define minValue(a, b) ((a < b) ? a : b)
-
-// ------------
-ClickEncoder Encoder(10, 11, 12);
-
 void timerIsr(void) {
   Encoder.service();
 }
+
+
+
+
+
+
+
+
+
 
 
 //-------------------------------------------------------------
@@ -217,18 +511,21 @@ bool menuExit(const Menu::Action_t a) {
 bool menuDummy(const Menu::Action_t a) {
   return true;
 }
-
+/*
 bool menuBack(const Menu::Action_t a) {
   if (a == Menu::actionDisplay) {
     engine->navigate(engine->getParent(engine->getParent()));
   }
   return true;
 }
+*/
 
-//------------------------------
-
-uint8_t menuItemsVisible = 8;
-uint8_t menuItemHeight = 24;
+bool menuBack(const Menu::Action_t a) {
+  if (a == Menu::actionDisplay) {
+    engine->navigate(engine->getParent());
+  }
+  return true;
+}
 
 void renderMenuItem(const Menu::Item_t *mi, uint8_t pos) {
   //ScopedTimer tm("  render menuitem");
@@ -238,7 +535,7 @@ void renderMenuItem(const Menu::Item_t *mi, uint8_t pos) {
   tft.setCursor(10, y);
 
   // a cursor
-  tft.drawRect(8, y - 2, 90, menuItemHeight, (engine->currentItem == mi) ? RED : BLACK);
+  tft.drawRect(8, y - 2, 90, menuItemHeight, (engine->currentItem == mi) ?   CLOUDS : BLACK);
   tft.print(engine->getLabel(mi));
 
   // mark items that have children
@@ -250,76 +547,53 @@ void renderMenuItem(const Menu::Item_t *mi, uint8_t pos) {
 // Name, Label, Next, Previous, Parent, Child, Callback
 MenuItem(miExit, "MENU", Menu::NullItem, Menu::NullItem, Menu::NullItem, miSettings, menuExit);
 
-MenuItem(miSettings, "Settings", miTest1, Menu::NullItem, miExit, miCalibrateLo, menuDummy);
+// Settings
+MenuItem(miSettings, "Settings", miEditProfile, Menu::NullItem, miExit, Menu::NullItem, menuDummy);
 
-  MenuItem(miCalibrateLo,  "Calibrate Lo", miCalibrateHi,  Menu::NullItem,       miSettings, Menu::NullItem, menuDummy);
-  MenuItem(miCalibrateHi,  "Calibrate Hi", miChannel0, miCalibrateLo,  miSettings, Menu::NullItem, menuDummy);
+// Reflow Profile
+MenuItem(miEditProfile, "Reflow Profiles",  miPIDSettings,    miEditProfile,        miExit,          miRampUpRate,     menuDummy);
 
-  MenuItem(miChannel0, "Channel 0", miChannel1, miCalibrateHi, miSettings, miChView0, menuDummy);
-    MenuItem(miChView0,  "Ch0:View",  miChScale0,     Menu::NullItem, miChannel0, Menu::NullItem, menuDummy);    
-    MenuItem(miChScale0, "Ch0:Scale", Menu::NullItem, miChView0,      miChannel0, Menu::NullItem, menuDummy);    
-
-  MenuItem(miChannel1, "Channel 1", Menu::NullItem, miChannel0, miSettings, miChView1, menuDummy);
-    MenuItem(miChView1,  "Ch1:View",  miChScale1,     Menu::NullItem, miChannel1, Menu::NullItem, menuDummy);    
-    MenuItem(miChScale1, "Ch1:Scale", miChBack1,      miChView1,      miChannel1, Menu::NullItem, menuDummy); 
-    MenuItem(miChBack1,  "Back",      Menu::NullItem, miChScale1,     miChannel1, Menu::NullItem, menuBack);
-
-MenuItem(miTest1, "Test 1 Menu", miTest2,        miSettings, miExit, Menu::NullItem, menuDummy);
-MenuItem(miTest2, "Test 2 Menu", miTest3,        miTest1,    miExit, Menu::NullItem, menuDummy);
-MenuItem(miTest3, "Test 3 Menu", miTest4,        miTest2,    miExit, Menu::NullItem, menuDummy);
-MenuItem(miTest4, "Test 4 Menu", miTest5,        miTest3,    miExit, Menu::NullItem, menuDummy);
-MenuItem(miTest5, "Test 5 Menu", miTest6,        miTest4,    miExit, Menu::NullItem, menuDummy);
-MenuItem(miTest6, "Test 6 Menu", miTest7,        miTest5,    miExit, Menu::NullItem, menuDummy);
-MenuItem(miTest7, "Test 7 Menu", miTest8,        miTest6,    miExit, Menu::NullItem, menuDummy);
-MenuItem(miTest8, "Test 8 Menu", Menu::NullItem, miTest7,    miExit, Menu::NullItem, menuDummy);
-
-
-//-----------------------------------------------------------------------
-/*                        LITTLE HELPERS                               */
-//-----------------------------------------------------------------------
-
-//----- Wait one touch ---------------------------------------------
-TSPoint waitOneTouch() {
-
-  //TSPoint p;
-
-  do {
-    p = ts.getPoint();
-
-    pinMode(XM, OUTPUT); //Pins configures again for TFT control
-    pinMode(YP, OUTPUT);
-
-  } while ((p.z < MINPRESSURE ) || (p.z > MAXPRESSURE));
-
-  return p;
-}
-
-//------- Return Touch Coordinates --------------------------------
-TSPoint getTouch() {
+        // Name,           Label,             Next,             Previous,           Parent,          Child,            Callback
+  MenuItem(miRampUpRate,   "RampUpRate" ,     miRampDownRate,   Menu::NullItem,     miEditProfile,   Menu::NullItem,   menuDummy);
+  MenuItem(miRampDownRate, "RampDownRate",    miPreheatTime,    miRampUpRate,       miEditProfile,   Menu::NullItem,   menuDummy);
   
-    p = ts.getPoint();
+  MenuItem(miPreheatTime,  "Preheat Time",    miPreheatTemp,    miRampDownRate,     miEditProfile,   Menu::NullItem,   menuDummy);
+  MenuItem(miPreheatTemp,  "Preheat Temp",    miSoakTime,       miPreheatTime,      miEditProfile,   Menu::NullItem,   menuDummy);
   
-   // if sharing pins, you'll need to fix the directions of the touchscreen pins
-      //pinMode(XP, OUTPUT);
-        pinMode(XM, OUTPUT); //Pins configures again for TFT control
-        pinMode(YP, OUTPUT);
-      //pinMode(YM, OUTPUT);
+  MenuItem(miSoakTime,     "Soak Time",       miSoakTemp,       miPreheatTemp,      miEditProfile,   Menu::NullItem,   menuDummy);
+  MenuItem(miSoakTemp,     "Soak Temp",       miPeakTime,       miSoakTime,         miEditProfile,   Menu::NullItem,   menuDummy);
+  
+  MenuItem(miPeakTime,     "Peak Time",       miPeakTemp,       miSoakTemp,         miEditProfile,   Menu::NullItem,   menuDummy);
+  MenuItem(miPeakTemp,     "Peak Temp",       miLoadProfile,    miPeakTime,         miEditProfile,   Menu::NullItem,   menuDummy);
+
+  MenuItem(miLoadProfile,  "Load Profile",    miSaveProfile,    miPeakTemp,         miEditProfile,   Menu::NullItem,   menuDummy);
+  MenuItem(miSaveProfile,  "Save Profile",    miFactoryReset,   miLoadProfile,      miEditProfile,   Menu::NullItem,   menuDummy);
+  
+  MenuItem(miFactoryReset, "FactoryReset",    miCalibBack,      miSaveProfile,      miEditProfile,   Menu::NullItem,   menuDummy);
+  MenuItem(miCalibBack,    "Back",            Menu::NullItem,   miFactoryReset,     miEditProfile,   Menu::NullItem,   menuBack);
+  
  
-   if ((p.z < MINPRESSURE ) || (p.z > MAXPRESSURE)){      
-                  
-      //  Serial.print("X = "); Serial.print(p.x);
-      //  Serial.print("\tY = "); Serial.print(p.y);
-      //  Serial.print("\tPressure = "); Serial.println(p.z);
-         
-        // if(p.y< (TS_MINY -5)){
-        //  Serial.println("erase");
-          // press the bottom of the screen to erase
-        //  tft.fillRect(0, BOXSIZE, tft.width(), tft.height() - BOXSIZE, BLACK);
-        // }     
-        p.x = map(p.x, TS_MINX, TS_MAXX, 0, tft.width());
-        p.y = map(p.y, TS_MINY, TS_MAXY, 0, tft.height());
-  }
-}
+// PID Calibration
+MenuItem(miPIDSettings, "PID",              Menu::NullItem,   miEditProfile,        miExit,        miCalibrateP,      menuDummy);
+
+  MenuItem(miCalibrateP, "Calibrate P",       miCalibrateI,     Menu::NullItem,      miPIDSettings,     Menu::NullItem,   menuDummy );
+  MenuItem(miCalibrateI, "Calibrate I",       miCalibrateD,     miCalibrateP,        miPIDSettings,     Menu::NullItem,   menuDummy );
+  MenuItem(miCalibrateD, "Calibrate D",       miCalibBack1,     miCalibrateI,        miPIDSettings,     Menu::NullItem,   menuDummy );
+  MenuItem(miCalibBack1,  "Back",             Menu::NullItem,   miCalibrateD,        miPIDSettings,     Menu::NullItem,   menuBack);
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 //-----------------------------------------------------------------------
 /*                             SETUP                                   */
@@ -327,43 +601,30 @@ TSPoint getTouch() {
 
 void setup() {
 
-  delay(1000);
-  //Serial.begin(9600);  
+  // Initialize ssrPin with default zero.
+  digitalWrite(ssrPin, LOW);
+  pinMode(ssrPin, OUTPUT);
+
+  Serial.begin(9600);  
+
+  // Screen Initialization
   tft.reset();
   tft.begin(0x9341);
   tft.setRotation(0);
-  
-  uint16_t width = tft.width() - 1;
-  uint16_t height = tft.height() - 1;
-  uint8_t border = 10;
 
-  tft.fillScreen(BLACK);
-  tft.fillRect(border, border, (width - border * 2), (height - border * 2), MYBROWN);//BLACK);
-  tft.drawRect(border, border, (width - border * 2), (height - border * 2), AMETHYST);//WHITE);
-    
-  tft.setCursor (24, 50);
-  tft.setTextSize (4);
-  tft.setTextColor(WHITE);
-  tft.println("floatLab");
-  tft.setCursor (26, 85);
-  tft.setTextSize (3);
-  tft.println("Reflow Oven");
-  tft.setCursor (87, 150);
-  tft.setTextSize (2);
-  tft.setTextColor(WHITE);
-  tft.println("v_0.1");
-  tft.fillRoundRect(20,200,200,100,16,TURQUOISE);
-  tft.setCursor (68, 250);
-  tft.setTextSize (1);
-  tft.setTextColor(WHITE);
-  tft.println("Touch to proceed");
+  // Draw welcome screen
+  drawBorder();
+
+  // Set page number to 0
   page = 0;
 
-  waitOneTouch();
-  
-  enterMenu();
-    
+  // wait for one touch
+  waitOneTouch(); 
 
+  // enter main menu
+  enterMenu();
+
+    
   // Encoder stuff
   
   Timer1.initialize(1000);
@@ -371,27 +632,18 @@ void setup() {
   
   pinMode(MISO, OUTPUT);
   pinMode(MOSI, OUTPUT);
-  // enable pull up, otherwise display flickers
-  PORTB |= (1 << MOSI) | (1 << MISO); 
   
+  // enable pull up, otherwise display flickers
+  PORTB |= (1 << MOSI) | (1 << MISO);  
   engine = new Menu::Engine(&Menu::NullItem);
   menuExit(Menu::actionDisplay); // reset to initial state
- 
-
- 
+  
   //----------------------
- 
   pinMode(XP, OUTPUT);
   pinMode(XM, OUTPUT);
   pinMode(YP, OUTPUT);
   pinMode(YM, OUTPUT);
-
 }
-
-int16_t encMovement;
-int16_t encAbsolute;
-int16_t encLastAbsolute = -1;
-bool updateMenu = false;
 
 //-----------------------------------------------------------------------
 /*                             LOOP                                   */
@@ -399,18 +651,16 @@ bool updateMenu = false;
 
 void loop() {
   
+  currentMillis = millis();
+  
   getTouch();
-
+  
   // Get button touches on different pages
   if (page == 1){
     if (p.x > 20 && p.x < 200 && p.y > 20 && p.y < 200 )
     {
     profileSelect();
-  
-    } else if(p.x > 20 && p.x < 120 && p.y > 200 && p.y < 320)
-    {
-      pid();
-  
+    
       } else if (p.x > 150 && p.x < 220 && p.y > 200 && p.y < 320)
       {
         settings();
@@ -442,6 +692,12 @@ void loop() {
             if(p.x > 20 && p.x < 220 && p.y > 20 && p.y < 100){
             enterMenu();
             }    */
+            
+            
+            
+            
+            
+            
     // handle encoder
   encMovement = Encoder.getValue();
   if (encMovement) {
@@ -501,7 +757,7 @@ void loop() {
     updateMenu = false;
     
     if (!encMovement) { // clear menu on child/parent navigation
-      tft.fillRect(8, 1, 120, 200, BLACK);
+      tft.fillRect(8, 1, 120, 320, BLACK);
     }
 
     // simple scrollbar
@@ -512,7 +768,7 @@ void loop() {
     uint8_t sbMarkHeight = sbHeight * sbItems / mi.siblings;
     uint8_t sbMarkTop = ((sbHeight - sbMarkHeight) / mi.siblings) * (mi.position -1);
     tft.fillRect(sbLeft, sbTop,     sbWidth, sbHeight,     WHITE);
-    tft.fillRect(sbLeft, sbMarkTop, sbWidth, sbMarkHeight, RED);
+    tft.fillRect(sbLeft, sbMarkTop, sbWidth, sbMarkHeight, POMEGRANATE );
 
     // debug scrollbar values
 #if 0
@@ -523,7 +779,7 @@ void loop() {
 
     // render the menu
     {
-      //ScopedTimer tm("render menu");
+      ScopedTimer tm("render menu");
       engine->render(renderMenuItem, menuItemsVisible);
     }
 
@@ -531,7 +787,7 @@ void loop() {
       ScopedTimer tm("helptext");
       tft.setTextSize(1);
       tft.setCursor(10, 260);
-      tft.print("Doubleclick to ");
+      //tft.print("Doubleclick to ");
       if (engine->getParent() == &miExit) {
         tft.print("exit. ");
       }
@@ -541,7 +797,6 @@ void loop() {
     }
   }
 
-  
   // dummy "application"
   if (systemState == State::Default) {
     if (systemState != previousSystemState) {
@@ -569,9 +824,25 @@ void loop() {
       tft.print(tmp);
     }
   }
- } //else if page 5. 
- 
-}// loop end
+ }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 //-------------------------------------------------------------
@@ -580,22 +851,17 @@ void loop() {
 
 void enterMenu(){
   
+  page = 1;
+  
   tft.fillScreen(BLACK);
   
   // Reflow !
   tft.fillRoundRect( 20, 20, 200, 210, 12, WHITE );
   tft.fillRoundRect( 25, 25, 190, 200, 12, BLACK );
-  tft.setCursor (35, 100);
+  tft.setCursor (36, 100);
   tft.setTextSize (4);
   tft.setTextColor(WHITE);
   tft.println("Reflow!");
-  
-  // PID
-  tft.fillRect( 20, 250, 70, 50, TURQUOISE );
-  tft.setCursor (38, 268);
-  tft.setTextSize (2);
-  tft.setTextColor(WHITE);
-  tft.println("PID");
   
   // Settings
   tft.fillRect( 110, 250, 110, 50, AMETHYST ); 
@@ -604,7 +870,13 @@ void enterMenu(){
   tft.setTextColor(WHITE);
   tft.println("Settings");
   
-  page = 1;
+/* // PID
+  tft.fillRect( 20, 250, 70, 50, TURQUOISE );
+  tft.setCursor (38, 268);
+  tft.setTextSize (2);
+  tft.setTextColor(WHITE);
+  tft.println("PID");
+  */
   
   waitOneTouch();  
  
@@ -612,56 +884,69 @@ void enterMenu(){
 
 void profileSelect(){
   
+  page = 2;
+  
   tft.fillScreen(BLACK);
 
   // Leaded [Pb]
   tft.fillRect( 20, 20, 200, 110, CONCRETE );
-  tft.setCursor (90, 60);
-  tft.setTextSize (5);
+  tft.setCursor (85, 55);
+  tft.setTextSize (6);
   tft.setTextColor(WHITE);
   tft.println("Pb");
     
   // Lead Free [P\b]
   tft.fillRect( 20, 170, 200, 110, TURQUOISE );
-  tft.setCursor (90, 210);
-  tft.setTextSize (5);
+  tft.setCursor (62, 200);
+  tft.setTextSize (6);
   tft.setTextColor(WHITE);
-  tft.println("Pb");
-  tft.drawLine(90,210, 120, 220, WHITE);
+  tft.println("RoHS");
   
-  page = 2;
-
   waitOneTouch();  
 
 }
   
+  
+
+//-------------------------------------------------------------
+/*                    CUSTOM MENU                            */
+//-------------------------------------------------------------
+  
 void reflow(){
-   
-  // Here comes the action, we're graphing a curve basd on the interpolated data from MAX31855K
+  
+  page = 3;
   tft.fillScreen(BLACK);
+
+
+  readThermo(500);
+
+
+
   
-  for (x = 0; x <= 360; x += 0.01) {
-  
+  // Graph
+  for (x = 0; x <= 360; x += 0.001)
+  {
+     if (currentMillis - previousMillis > interval){
+    // previousMillis = currentMillis;
+     
     //temperature = MAX31855.readThermocouple(CELSIUS);
     //Serial.println(temperature);    
+    y = log(x)*10;
     
-    y = 130;
-    //         1   2  3  4   5    6    7    8  9   10  11 12   13   14            15         16        17              18      19     20     21     22
-    GraphTemp(tft, x, y, 1, 312, 237, 312, 0, 180, 30, 0, 300, 30, "Oven Temp", "Time [s]", "Temp [C]" , DKGREY, GREEN, WHITE, ORANGE, BLACK, display1);
+    //         1   2  3  4   5    6    7    8  9   10  11 12   13   14            15         16        17        18      19     20     21     22
+    GraphTemp(tft, x, y, 0, 319, 239, 319, 0, 180, 30, 0, 300, 50, "Oven Temp", "Time", "Temp" , DKGREY, GREEN, BLUE, ORANGE, BLACK, display1);
   
-    y = y+ 60;
-    GraphError(tft, x, y, 1, 312, 237, 312, 0, 180, 30, 0, 300, 30, "Oven Temp", "Time [s]", "Temp C" , DKGREY, GREEN, WHITE, ORANGE, BLACK, display1);
+    y = y - 20;
+    
+    //         1   2  3  4   5    6    7    8  9   10  11 12   13   14     15     16     17      18     
+   GraphError(tft, x, y, 0, 319, 239, 319, 0, 180, 30, 0, 300, 50, DKGREY, GREEN, WHITE, ORANGE, display1);
 
-   /* GraphP(tft, x, y3, 0, 310, 238, 300, 0, 180, 50, 0, 300, 50, "Oven Temp", "Time [s]", "Temp C" , DKGREY, ORANGE, WHITE, WHITE, BLACK, display1);
-    GraphI(tft, x, y4, 0, 310, 238, 300, 0, 180, 50, 0, 300, 50, "Oven Temp", "Time [s]", "Temp C" , DKGREY, ORANGE, WHITE, WHITE, BLACK, display1);
-    GraphD(tft, x, y5, 0, 310, 238, 300, 0, 180, 50, 0, 300, 50, "Oven Temp", "Time [s]", "Temp C" , DKGREY, ORANGE, WHITE, WHITE, BLACK, display1);
-   */
-  }
-  page = 3;
+     }
+   }
+
+  resetFunc();
+
   
-  waitOneTouch();
-  
-  enterMenu();
 }
 
 
@@ -675,34 +960,17 @@ void settings(){
   tft.println("Settings");
   waitOneTouch();
  // enterMenu();
-
-}
-
-void pid(){
-  
-  page = 5;
-  
-  //engine->render(renderMenuItem, menuItemsVisible);
- /* 
-  tft.fillScreen(BLACK);
-  tft.drawRoundRect(20,20, 200,200, 20, GREEN);
-  tft.setCursor (100, 160);
-  tft.setTextSize (2);
-  tft.setTextColor(YELLOW);
-  tft.println("PID");
-  
-  waitOneTouch();*/
-//  enterMenu();
-  waitOneTouch();
-
 }
 
 
+
+
+
 //--------------------------------------------------------------------
-/*                  Custom Graphing Functions                       */
+/*                   Custom Graphing Function                       */
 //--------------------------------------------------------------------
 
-/*  function to draw a cartesian coordinate system and plot whatever data you want
+/*  function to draw a cartesian coordinate systed and plot whatever data you want
     just pass x and y and the graph will be drawn
 
     1.  &d name of your display object
@@ -718,19 +986,20 @@ void pid(){
     11  ylo = lower bound of y axis
     12  yhi = upper bound of y asis
     13  yinc = division of y axis (distance not count)
-    14  title = title of graph
-    15  xlabel = x asis label
-    16  ylabel = y asis label
-    17  reflowZone = "ramp to soak", "preheat", "soak", "ramp to peak", "peak", "cooling"
-    18  gcolor = graph line colors
-    19  acolor = axi ine colors
-    20  pcolor = color of your plotted data
-    21  tcolor = text color
-    22  bcolor = background color
-    23  &redraw = flag to redraw graph on fist call only
+ -  14  title = title of graph
+ -  15  xlabel = x asis label
+ -  16  ylabel = y asis label
+    17  gcolor = graph line colors
+    18  acolor = axi ine colors
+    19  pcolor = color of your plotted data
+ -  20  tcolor = text color
+ -  21  bcolor = background color
+    22  &redraw = flag to redraw graph on fist call only
 */
-    
+
 //---------------------------------------------------------------------
+//void GraphTemp(Adafruit_TFTLCD &d, double x, double y, double gx, double gy, double w, double h, double xlo, double xhi, double xinc, double ylo, double yhi, double yinc, String title, String xlabel, String ylabel, unsigned int gcolor, unsigned int acolor, unsigned int pcolor, unsigned int tcolor, unsigned int bcolor, boolean &redraw)
+
 void GraphTemp(Adafruit_TFTLCD &d, double x, double y, double gx, double gy, double w, double h, double xlo, double xhi, double xinc, double ylo, double yhi, double yinc, String title, String xlabel, String ylabel, unsigned int gcolor, unsigned int acolor, unsigned int pcolor, unsigned int tcolor, unsigned int bcolor, boolean &redraw)
 {
   double ydiv, xdiv;
@@ -776,7 +1045,8 @@ void GraphTemp(Adafruit_TFTLCD &d, double x, double y, double gx, double gy, dou
       else {
         d.drawLine(temp, gy, temp, gy - h, gcolor);
       }
-    /*d.setTextSize(1);
+      /*
+      d.setTextSize(1);
       d.setTextColor(tcolor, bcolor);
       d.setCursor(temp, gy + 10);
       // precision is default Arduino--this could really use some format control
@@ -784,7 +1054,7 @@ void GraphTemp(Adafruit_TFTLCD &d, double x, double y, double gx, double gy, dou
     }
 
     //---------------------------------
-    //Title
+    /* //Title
     d.setTextSize(2);
     d.setTextColor(tcolor, bcolor);
     d.setCursor(130 , gy - h + 12);
@@ -799,7 +1069,7 @@ void GraphTemp(Adafruit_TFTLCD &d, double x, double y, double gx, double gy, dou
     d.setTextColor(acolor, bcolor);
     d.setCursor(gx + 2 , gy - h + 2);
     d.println(ylabel);
-/*   
+   
     // Reflow Zone
     d.setTextSize(1);
     d.setTextColor();
@@ -818,10 +1088,10 @@ void GraphTemp(Adafruit_TFTLCD &d, double x, double y, double gx, double gy, dou
   ox = x;
   oy = y;
 
-}/*  End of graphing functioin  */
+}
 
 //---------------------------------------------------------------------
-void GraphError(Adafruit_TFTLCD &d, double x, double y, double gx, double gy, double w, double h, double xlo, double xhi, double xinc, double ylo, double yhi, double yinc, String title, String xlabel, String ylabel, unsigned int gcolor, unsigned int acolor, unsigned int pcolor, unsigned int tcolor, unsigned int bcolor, boolean &redraw)
+void GraphError(Adafruit_TFTLCD &d, double x, double y, double gx, double gy, double w, double h, double xlo, double xhi, double xinc, double ylo, double yhi, double yinc, unsigned int gcolor, unsigned int acolor, unsigned int pcolor, unsigned int bcolor, boolean &redraw)
 {
   x =  (x - xlo) * ( w) / (xhi - xlo) + gx;
   y =  (y - ylo) * (gy - h - gy) / (yhi - ylo) + gy;
@@ -831,57 +1101,4 @@ void GraphError(Adafruit_TFTLCD &d, double x, double y, double gx, double gy, do
   ox2 = x;
   oy2 = y;
 
-}/*  End of graphing functioin  */
-
-//---------------------------------------------------------------------
-void GraphP(Adafruit_TFTLCD &d, double x, double y3, double gx, double gy, double w, double h, double xlo, double xhi, double xinc, double ylo, double yhi, double yinc, String title, String xlabel, String ylabel, unsigned int gcolor, unsigned int acolor, unsigned int pcolor, unsigned int tcolor, unsigned int bcolor, boolean &redraw)
-{
-  x =  (x - xlo) * ( w) / (xhi - xlo) + gx;
-  y3 =  (y - ylo) * (gy - h - gy) / (yhi - ylo) + gy;
-  d.drawLine(ox2, oy2, x, y, ORANGE);
-  d.drawLine(ox2, oy2 + 1, x, y3 + 1, ORANGE);
-  d.drawLine(ox2, oy2 - 1, x, y3- 1, ORANGE);
-  ox3 = x;
-  oy3 = y3;
-
-}/*  End of graphing functioin  */
-
-//---------------------------------------------------------------------
-void GraphI(Adafruit_TFTLCD &d, double x, double y4, double gx, double gy, double w, double h, double xlo, double xhi, double xinc, double ylo, double yhi, double yinc, String title, String xlabel, String ylabel, unsigned int gcolor, unsigned int acolor, unsigned int pcolor, unsigned int tcolor, unsigned int bcolor, boolean &redraw)
-{
-  x =  (x - xlo) * ( w) / (xhi - xlo) + gx;
-  y4 =  (y4 - ylo) * (gy - h - gy) / (yhi - ylo) + gy;
-  d.drawLine(ox2, oy2, x, y, TEAL);
-  d.drawLine(ox2, oy2 + 1, x, y4 + 1, TEAL);
-  d.drawLine(ox2, oy2 - 1, x, y4 - 1, TEAL);
-  ox4 = x;
-  oy4 = y4;
-
-}/*  End of graphing functioin  */
-
-//---------------------------------------------------------------------
-void GraphD(Adafruit_TFTLCD &d, double x, double y5, double gx, double gy, double w, double h, double xlo, double xhi, double xinc, double ylo, double yhi, double yinc, String title, String xlabel, String ylabel, unsigned int gcolor, unsigned int acolor, unsigned int pcolor, unsigned int tcolor, unsigned int bcolor, boolean &redraw)
-{
-  x =  (x - xlo) * ( w) / (xhi - xlo) + gx;
-  y5 =  (y5 - ylo) * (gy - h - gy) / (yhi - ylo) + gy;
-  d.drawLine(ox2, oy2, x, y, CYAN);
-  d.drawLine(ox2, oy2 + 1, x, y5 + 1, CYAN);
-  d.drawLine(ox2, oy2 - 1, x, y5 - 1, CYAN);
-  ox5 = x;
-  oy5 = y5;
-
-}/*  End of graphing functioin  */
-
-//-----------------------------------------------------------------------
-/*                             Miscelaneous                            */
-//-----------------------------------------------------------------------
-void drawBorder()
-{
-  uint16_t width = tft.width() - 1;
-  uint16_t height = tft.height() - 1;
-  uint8_t border = 10;
-
-  tft.fillScreen(BLACK);
-  tft.fillRect(border, border, (width - border * 2), (height - border * 2), MYBROWN);//BLACK);
-  tft.drawRect(border, border, (width - border * 2), (height - border * 2), AMETHYST);//WHITE);
-}
+}  
