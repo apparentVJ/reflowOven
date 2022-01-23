@@ -1,23 +1,22 @@
 # reflowOven (WIP)
 
-Arduino based reflow oven with GUI. 
+Arduino Nano based reflow oven with simple GUI. 
 
 - Intuitive interface
 
-- Simple to use
+- Simple to use GUI
 
 - PID Control Loop
 
-- ~~ZeroCrossing~~ (not for now)
+~ Zero Crossing (FOTEK SSR-25 DA)
 
-- Touch LCD + Click Encoder
+- Touch LCD SPFD5408 + Click Encoder ( out of pins, lcd works great )
 
-- Temperature & Error Visualization
+- Temperature, Setpoint, junctionTemp & Error Visualization
 
 - Arduino NANO & MAX31855K
 
 - Safety (!)
-
 
 
 ---
